@@ -27,8 +27,8 @@
         Use this flag to be prompted to select a directory in an Open File Dialog that will be zipped and added as a supplementary file.
         When the exe is run, this script will first be unzipped and all files are available.
 
-    .PARAMETER RemoveTempDir
-        Set this to false to keep the temp directory around after the exe is created. It is available at the root of C:.
+    .PARAMETER KeepTempDir
+        Keep the temp directory around after the exe is created. It is available at the root of C:.
 
     .PARAMETER x64
         Use the 64-bit iexpress path so that 64-bit PowerShell is consequently called.
@@ -45,7 +45,7 @@
         # Prompts the user to select the PowerShell script and supplemental files using an Open File Dialog.
 
     .EXAMPLE
-        .\Create-EXEFrom.ps1 -SupplementalDirectoryPath 'C:\Temp\MyTestDir' -RemoveTempDir $false
+        .\Create-EXEFrom.ps1 -SupplementalDirectoryPath 'C:\Temp\MyTestDir' -KeepTempDir
         # Zips MyTestDir and attaches it to the exe. When the exe is run, but before the user's script gets run, 
         # it will be extracted to the same directory as the user's script. Temp directory used during exe creation
         # will be left intact for user inspection or debugging purposes.
@@ -54,6 +54,10 @@
         Created by Nick Rodriguez
 
         Requires iexpress, which is included in most versions of Windows (https://en.wikipedia.org/wiki/IExpress).
+
+        Version 1.6 - 4/25/16
+            -Changed name of RemoveTempDir param to be a switch named KeepTempDir
+            -Added ability to use the exe's root path in your PS script with "Split-Path -Parent $Args[0]"
 
         Version 1.5 - 4/6/16
             -Added RunAs flag so iexpress is started as admin
@@ -259,12 +263,12 @@
             # If we're dealing with a zip file, we need to set the primary command to unzip the user's files
             Add-Content $SED "AppLaunched=cmd /c PowerShell -ExecutionPolicy Bypass -File `"$UnZipScript`""
             # After we've staged our files, run the user's script
-            Add-Content $SED "PostInstallCmd=cmd /c PowerShell -ExecutionPolicy Bypass -File `"$PSScriptName`""
+            Add-Content $SED "PostInstallCmd=cmd /c for /f `"skip=1 tokens=1* delims=`" %i in (`'wmic process where `"name=`'$target.exe`'`" get ExecutablePath`') do PowerShell -ExecutionPolicy Bypass -Command Clear-Host; `".\$PSScriptName`" `"%i`" & exit"
             Add-Content $SED "FILE0=UnZip.ps1"
             Add-Content $SED "FILE1=$PSScriptName"
         } else {
             $IndexOffset = 1
-            Add-Content $SED "AppLaunched=cmd /c PowerShell -ExecutionPolicy Bypass -File `"$PSScriptName`""
+            Add-Content $SED "AppLaunched=cmd /c for /f `"skip=1 tokens=1* delims=`" %i in (`'wmic process where `"name=`'$target.exe`'`" get ExecutablePath`') do PowerShell -ExecutionPolicy Bypass -Command Clear-Host; `".\$PSScriptName`" `"%i`" & exit"
             Add-Content $SED "PostInstallCmd=<None>"
             Add-Content $SED "FILE0=$PSScriptName"
         }
@@ -300,7 +304,7 @@
         # Call IExpress to create exe from the sed we just created (run as admin)
         Start-Process $IExpress "/N $SED" -Wait -Verb RunAs
 
-        # Clean up
-        if ($RemoveTempDir) { Remove-Item $Temp -Recurse -Force }
+        # Clean up unless user specified not to
+        if (-not $KeepTempDir) { Remove-Item $Temp -Recurse -Force }
     }
 }
