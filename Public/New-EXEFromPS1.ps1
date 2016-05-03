@@ -55,6 +55,9 @@
 
         Requires iexpress, which is included in most versions of Windows (https://en.wikipedia.org/wiki/IExpress).
 
+        Version 1.7 - 5/3/16
+            -Fixed bug in path to UnZip.ps1 when using supplemental directories
+
         Version 1.6 - 4/25/16
             -Changed name of RemoveTempDir param to be a switch named KeepTempDir
             -Added ability to use the exe's root path in your PS script with "Split-Path -Parent $Args[0]"
@@ -261,7 +264,7 @@
             Add-Content $UnZipScript $UnZipFunction
             Add-Content $UnZipScript "UnZip-File `'$SupplementalFiles`'"
             # If we're dealing with a zip file, we need to set the primary command to unzip the user's files
-            Add-Content $SED "AppLaunched=cmd /c PowerShell -ExecutionPolicy Bypass -File `"$UnZipScript`""
+            Add-Content $SED "AppLaunched=cmd /c PowerShell -ExecutionPolicy Bypass -File `".\UnZip.ps1`""
             # After we've staged our files, run the user's script
             Add-Content $SED "PostInstallCmd=cmd /c for /f `"skip=1 tokens=1* delims=`" %i in (`'wmic process where `"name=`'$target.exe`'`" get ExecutablePath`') do PowerShell -ExecutionPolicy Bypass -Command Clear-Host; `".\$PSScriptName`" `"%i`" & exit"
             Add-Content $SED "FILE0=UnZip.ps1"
