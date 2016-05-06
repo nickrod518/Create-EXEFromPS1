@@ -55,35 +55,6 @@
 
         Requires iexpress, which is included in most versions of Windows (https://en.wikipedia.org/wiki/IExpress).
 
-        Version 1.7 - 5/3/16
-            -Fixed bug in path to UnZip.ps1 when using supplemental directories
-
-        Version 1.6 - 4/25/16
-            -Changed name of RemoveTempDir param to be a switch named KeepTempDir
-            -Added ability to use the exe's root path in your PS script with "Split-Path -Parent $Args[0]"
-
-        Version 1.5 - 4/6/16
-            -Added RunAs flag so iexpress is started as admin
-
-        Version 1.4 - 3/29/16
-            -Added x64 switch for creating exe using 64-bit iexpress.
-    
-        Version 1.3 - 2/29/16
-            -Added PS Version 2.0 support
-
-        Version 1.2 - 2/27/16
-            -Added parameter for leaving temp directory intact - useful for bug smashing.
-            -Added options for selecting or specifying an entire directory as a supplemental file.
-            -Added functions for zipping, unzipping, testing .NET version (related to zipping), and GUI for selecting directory.
-
-        Version 1.1 - 2/27/16
-            -Removed $PSScriptRoot references in process block, which were causing errors when run from ISE.
-            -New target exe destination is directory of target ps1.
-            -Changed location of temp directory to root of C: to prevent issues with path names containing spaces.
-            -Changed method of getting target name from trimming to replacing to prevent cutting off chars of file name.
-
-        Version 1.0 - 2/26/16
-
     #>
 
     [CmdletBinding(DefaultParameterSetName = 'NoSupplementalFiles')]
@@ -207,6 +178,7 @@
                 Move-Item $SupplementalFilePaths $Temp
             } elseif ($PSCmdlet.ParameterSetName -eq 'SpecifyDirectory') {
                 # Get the path of the directory the user supplied
+                $SupplementalDirectoryPath = $SupplementalDirectoryPath.TrimEnd('\')
                 $SupplementalDirectoryPath = (Get-Item $SupplementalDirectoryPath).FullName
                 Write-Verbose "Supplemental directory: $SupplementalDirectoryPath"
                 if ((Test-NETVersion) -and (Test-PSVersion)) {
