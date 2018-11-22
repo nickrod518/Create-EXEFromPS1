@@ -19,7 +19,7 @@
     Use this flag to be prompted to select the supplementary files in an Open File Dialog.
 
 .PARAMETER SupplementalDirectoryPath
-    Path to a directory that will be zipped and added as a supplementary file. 
+    Path to a directory that will be zipped and added as a supplementary file.
     When the exe is run, this script will first be unzipped and all files are available.
 
 .PARAMETER SelectSupplementalDirectory
@@ -45,7 +45,7 @@
 
 .EXAMPLE
     .\Create-EXEFrom.ps1 -SupplementalDirectoryPath 'C:\Temp\MyTestDir' -KeepTempDir
-    # Zips MyTestDir and attaches it to the exe. When the exe is run, but before the user's script gets run, 
+    # Zips MyTestDir and attaches it to the exe. When the exe is run, but before the user's script gets run,
     # it will be extracted to the same directory as the user's script. Temp directory used during exe creation
     # will be left intact for user inspection or debugging purposes.
 
@@ -96,8 +96,8 @@ param (
     $SelectSupplementalDirectory,
 
     [Parameter(Mandatory=$false)]
-    [bool]
-    $RemoveTempDir = $true,
+    [switch]
+    $KeepTempDir,
 
     [Parameter(Mandatory=$false)]
     [switch]
@@ -119,10 +119,10 @@ begin {
             [Parameter(Mandatory=$false)]
             [switch]
             $SupplementalFiles
-        ) 
+        )
 
         [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null
-    
+
         $OpenFileDialog = New-Object System.Windows.Forms.OpenFileDialog
         # PSScriptRoot will be null if run from the ISE or PS Version < 3.0
         $OpenFileDialog.InitialDirectory = $PSScriptRoot
@@ -171,13 +171,13 @@ begin {
         # Return true if .NET client is at least version 4.5
         if ($NETVersion -ge 4.5) {
             Write-Verbose 'Client .NET is version 4.5 or greater'
-            $true 
+            $true
         } else {
             Write-Verbose 'Client .NET is less than version 4.5'
-            $false 
+            $false
         }
     }
-    
+
     function Test-PSVersion {
         # Return true if PowerShell is at least version 3
         if ($PSVersionTable.PSVersion.Major -ge 3) {
@@ -207,7 +207,7 @@ begin {
         # Get the full path of the source zip archive
         $SourceDirectoryFullPath = (Get-Item $SourceDirectoryPath).FullName
         Write-Verbose "Full path of source directory: $SourceDirectoryFullPath"
-        
+
         $TargetZipPath = "$DestinationDirectoryPath\$($SourceDirectoryFullPath.Split('\')[-1]).zip"
 
         # Create empty zip file that is not read only
@@ -289,7 +289,7 @@ begin {
             Write-Verbose "Destination for zip archive contents: $DestinationDirectory"
 
             # UnZip files answering yes to all prompts
-            $Shell.NameSpace($DestinationDirectory).CopyHere($Shell.NameSpace($SourceZipFullPath).Items(), 16) 
+            $Shell.NameSpace($DestinationDirectory).CopyHere($Shell.NameSpace($SourceZipFullPath).Items(), 16)
         }
     }
 }
@@ -302,13 +302,13 @@ process {
         try {
             $PSScriptPath = (Get-File).FullName
             $PSScriptName = $PSScriptPath.Split('\')[-1]
-        } catch { exit } 
+        } catch { exit }
     }
     Write-Verbose "PowerShell script selected: $PSScriptPath"
 
     # Name of the extensionless target, replace spaces with underscores
     $Target = ($PSScriptName -replace '.ps1', '') -replace " ", '_'
-    
+
     # Get the directory the script was found in
     $ScriptRoot = $PSScriptPath.Substring(0, $PSScriptPath.LastIndexOf('\'))
 
@@ -373,7 +373,7 @@ process {
 
         }
     }
-    
+
     # If creating 64-bit exe, append to name to clarify
     if ($x64) {
         $EXE = "$ScriptRoot\$Target (x64).exe"
@@ -427,7 +427,7 @@ process {
         Add-Content $SED "PostInstallCmd=<None>"
         Add-Content $SED "FILE0=$PSScriptName"
     }
-    
+
     # Add the ps1 and supplemental files
     If ($SupplementalFiles) {
         $Index = $IndexOffset
@@ -438,7 +438,7 @@ process {
     }
     Add-Content $SED "[SourceFiles]"
     Add-Content $SED "SourceFiles0=$Temp"
-    
+
     Add-Content $SED "[SourceFiles0]"
     Add-Content $SED "%FILE0%="
     if ('SelectDirectory', 'SpecifyDirectory' -contains $PSCmdlet.ParameterSetName) {
