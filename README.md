@@ -30,6 +30,8 @@ If blank, you will be prompted with a file browse dialog where you can select a 
 
 **x64** - Use the 64-bit iexpress path so that 64-bit PowerShell is consequently called.
 
+**SigningCertificate** - Sign all PowerShell scripts and subsequent executable with the defined certificate. Expected format of Cert:\CurrentUser\My\XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
 ### Examples
 ```
 New-EXEFromPS1 -PSScriptPath .\test.ps1 -SupplementalFilePaths '..\test2.ps1', .\ps1toexe.ps1

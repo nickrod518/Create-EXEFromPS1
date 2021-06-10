@@ -32,7 +32,11 @@
 
     .PARAMETER x64
         Use the 64-bit iexpress path so that 64-bit PowerShell is consequently called.
-
+		
+	.PARAMETER SigningCertificate
+        Sign all PowerShell scripts and subsequent executable with the defined certificate.
+        Expected format of Cert:\CurrentUser\My\XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+		
     .OUTPUTS
         An exe file in the same directory as the ps1 script you specify
 
@@ -102,7 +106,21 @@
 
         [Parameter(Mandatory=$false)]
         [switch]
-        $x64
+        $x64,
+		
+        [Parameter(Mandatory=$false)]
+        [ValidateScript({
+                  if (Test-Path $_) {
+        		if ((Get-Item $_).HasPrivateKey -ne $true) {
+        			throw "[$_] You do not have the corresponding private key to sign with this certificate."
+        		} else { $true }
+        	}
+        	else {
+        		throw "[$_] Cannot find the certificate."
+        	}
+              })]
+              [string]
+              $SigningCertificate
     )
 
     begin {
@@ -126,7 +144,17 @@
         }
         Write-Verbose "PowerShell script selected: $PSScriptPath"
 
-        # Name of the extensionless target, replace spaces with underscores
+        # If signing certificate defined, generate objects to be used to sign subsequent scrips/executables.
+		if ($SigningCertificate -ne $null) {
+			Write-Verbose "Signing Certificate defined, will detect and sign any unsigned supplemental PowerShell scripts and final executable."
+			$certificateobject = Get-Item $SigningCertificate
+			$certificatethumb = $certificateobject.Thumbprint
+			$SignFiles = $true
+		} else {
+			$SignFiles = $false
+		}
+		
+		# Name of the extensionless target, replace spaces with underscores
         $Target = ($PSScriptName -replace '.ps1', '') -replace " ", '_'
 
         # Get the directory the script was found in
@@ -137,6 +165,20 @@
         Write-Verbose "Using temp directory $Temp"
 
         # Copy the PowerShell script to our temp directory
+		if ($SignFiles) {
+			Write-Verbose "Checking primary PowerShell scripts for signature."
+			if (((Get-AuthenticodeSignature $PSScriptPath).Status) -ne 'Valid') {
+				Write-Verbose "$($PSScriptPath) is not signed, signing with certificate thumb print: $($certificatethumb)"
+				Set-AuthenticodeSignature -Certificate $certificateobject -FilePath $PSScriptPath | Out-Null
+				if ((((Get-AuthenticodeSignature -FilePath $PSScriptPath).SignerCertificate).Thumbprint) -ne $certificatethumb) {
+					Write-verbose "Signing $($PSScriptPath) failed"
+				} else {
+					Write-verbose "$($PSScriptPath) signing successful."
+				}
+			} else {
+				Write-verbose "$($PSScriptPath) already has a valid signature."
+			}
+		}
         Copy-Item $PSScriptPath $Temp
 
         Write-Verbose "Using Parameter Set: $($PSCmdlet.ParameterSetName)"
@@ -150,7 +192,27 @@
                 $SupplementalFilePaths = (Get-File -SupplementalFiles).FullName
                 $SupplementalFiles = (Get-Item $SupplementalFilePaths).Name
                 Write-Verbose "Supplemental files: `n$SupplementalFilePaths"
-
+				if ($SignFiles) {
+					# Determine if any of the specified files are PowerShell scripts and sign them if they are.
+					Write-Verbose "Checking supplemental files for any PowerShell scripts and signing them."
+					foreach ($SupplementalFile in $SupplementalFilePaths) {
+						if ((Get-item $SupplementalFile).Extension -eq '.ps1') {
+							$SupplementalScript = Get-item $SupplementalFile
+							if (((Get-AuthenticodeSignature $SupplementalScript).Status) -ne 'Valid') {
+								Write-Verbose "$($SupplementalScript) is not signed, signing with certificate thumb print: $($certificatethumb)"
+								Set-AuthenticodeSignature -Certificate $certificateobject -FilePath $SupplementalScript | Out-Null
+								if ((((Get-AuthenticodeSignature -FilePath $SupplementalScript).SignerCertificate).Thumbprint) -ne $certificatethumb) {
+									Write-verbose "Signing $($SupplementalScript) failed"
+								} else {
+									Write-verbose "$($SupplementalScript) signing successful."
+								}
+							} else {
+								Write-verbose "$($SupplementalScript) already has a valid signature."
+							}
+						}
+					}
+				}
+				
                 # Copy supplemental files to temp directory
                 Copy-Item $SupplementalFilePaths $Temp
 
@@ -159,7 +221,27 @@
                 $SupplementalFilePaths = (Get-Item $SupplementalFilePaths).FullName
                 $SupplementalFiles = (Get-Item $SupplementalFilePaths).Name
                 Write-Verbose "Supplemental files: `n$SupplementalFilePaths"
-
+				if ($SignFiles) {
+					# Determine if any of the specified files are PowerShell scripts and sign them if they are.
+					Write-Verbose "Checking supplemental files for any PowerShell scripts and signing them."
+					foreach ($SupplementalFile in $SupplementalFilePaths) {
+						if ((Get-item $SupplementalFile).Extension -eq '.ps1') {
+							$SupplementalScript = Get-item $SupplementalFile
+							if (((Get-AuthenticodeSignature $SupplementalScript).Status) -ne 'Valid') {
+								Write-Verbose "$($SupplementalScript) is not signed, signing with certificate thumb print: $($certificatethumb)"
+								Set-AuthenticodeSignature -Certificate $certificateobject -FilePath $SupplementalScript | Out-Null
+								if ((((Get-AuthenticodeSignature -FilePath $SupplementalScript).SignerCertificate).Thumbprint) -ne $certificatethumb) {
+									Write-verbose "Signing $($SupplementalScript) failed"
+								} else {
+									Write-verbose "$($SupplementalScript) signing successful."
+								}
+							} else {
+								Write-verbose "$($SupplementalScript) already has a valid signature."
+							}
+						}
+					}
+				}
+				
                 # Copy supplemental files to temp directory
                 Copy-Item $SupplementalFilePaths $Temp
 
@@ -167,6 +249,22 @@
                 # Prompt user to select supplemental directory
                 $SupplementalDirectoryPath = (Get-Directory).FullName
                 Write-Verbose "Supplemental directory: $SupplementalDirectoryPath"
+				if ($SignFiles) {
+					# Find and sign any unsigned PowerShell scripts in the supplemental directory and sign them before zipping.
+					foreach ($SupplementalScript in (Get-ChildItem "$($SupplementalDirectoryPath)\*.ps1" -recurse)) {
+						if (((Get-AuthenticodeSignature $SupplementalScript).Status) -ne 'Valid') {
+							Write-Verbose "$($SupplementalScript) is not signed, signing with certificate thumb print: $($certificatethumb)"
+							Set-AuthenticodeSignature -Certificate $certificateobject -FilePath $SupplementalScript | Out-Null
+							if ((((Get-AuthenticodeSignature -FilePath $SupplementalScript).SignerCertificate).Thumbprint) -ne $certificatethumb) {
+								Write-verbose "Signing $($SupplementalScript) failed"
+							} else {
+								Write-verbose "$($SupplementalScript) signing successful."
+							}
+						} else {
+							Write-verbose "$($SupplementalScript) already has a valid signature."
+						}
+					}
+				}
                 if ((Test-NETVersion) -and (Test-PSVersion)) {
                     $SupplementalFilePaths = Zip-File -SourceDirectoryPath $SupplementalDirectoryPath -DestinationDirectoryPath $Temp
                 } else {
@@ -181,6 +279,22 @@
                 $SupplementalDirectoryPath = $SupplementalDirectoryPath.TrimEnd('\')
                 $SupplementalDirectoryPath = (Get-Item $SupplementalDirectoryPath).FullName
                 Write-Verbose "Supplemental directory: $SupplementalDirectoryPath"
+				if ($SignFiles) {
+					# Find and sign any unsigned PowerShell scripts in the supplemental directory and sign them before zipping.
+					foreach ($SupplementalScript in (Get-ChildItem "$($SupplementalDirectoryPath)\*.ps1" -recurse)) {
+						if (((Get-AuthenticodeSignature $SupplementalScript).Status) -ne 'Valid') {
+							Write-Verbose "$($SupplementalScript) is not signed, signing with certificate thumb print: $($certificatethumb)"
+							Set-AuthenticodeSignature -Certificate $certificateobject -FilePath $SupplementalScript | Out-Null
+							if ((((Get-AuthenticodeSignature -FilePath $SupplementalScript).SignerCertificate).Thumbprint) -ne $certificatethumb) {
+								Write-verbose "Signing $($SupplementalScript) failed"
+							} else {
+								Write-verbose "$($SupplementalScript) signing successful."
+							}
+						} else {
+							Write-verbose "$($SupplementalScript) already has a valid signature."
+						}
+					}
+				}
                 if ((Test-NETVersion) -and (Test-PSVersion)) {
                     $SupplementalFilePaths = Zip-File -SourceDirectoryPath $SupplementalDirectoryPath -DestinationDirectoryPath $Temp
                 } else {
@@ -192,7 +306,8 @@
                 Move-Item $SupplementalFilePaths $Temp
 
             }
-        }
+   
+		}
 
         # If creating 64-bit exe, append to name to clarify
         if ($x64) {
@@ -200,6 +315,21 @@
         } else {
             $EXE = "$ScriptRoot\$Target.exe"
         }
+		
+		# Determine if the EXE target already exists, and if it does prompt the user on how to continue.
+		if (Test-Path $EXE) {
+			Write-Output "$($EXE) already exists, would you like to replace it?"
+			$ClearExisting = Read-Host "[y]/n"
+			if (($ClearExisting.ToUpper()) -eq 'N') {
+				Write-Host "Please re-run after you have cleaned up the destination directory." -ForegroundColor Red
+				Start-sleep -seconds 30
+				Remove-Item $Temp -Recurse -Force 
+				break
+			} else {
+				Remove-item $EXE -Force | Out-Null
+			}
+		}
+		
         Write-Verbose "Target EXE: $EXE"
 
         # create the sed file used by iexpress
@@ -236,14 +366,28 @@
             Add-Content $UnZipScript $UnZipFunction
             Add-Content $UnZipScript "UnZip-File `'$SupplementalFiles`'"
             # If we're dealing with a zip file, we need to set the primary command to unzip the user's files
-            Add-Content $SED "AppLaunched=cmd /c PowerShell -ExecutionPolicy Bypass -File `".\UnZip.ps1`""
-            # After we've staged our files, run the user's script
-            Add-Content $SED "PostInstallCmd=cmd /c for /f `"skip=1 tokens=1* delims=`" %i in (`'wmic process where `"name=`'$target.exe`'`" get ExecutablePath`') do PowerShell -ExecutionPolicy Bypass -Command Clear-Host; `".\$PSScriptName`" `"%i`" & exit"
+            Add-Content $SED "AppLaunched=cmd /c PowerShell -NoProfile -ExecutionPolicy Bypass -File `".\UnZip.ps1`""
+			# After we've staged our files, run the user's script
+            Add-Content $SED "PostInstallCmd=cmd /c for /f `"skip=1 tokens=1* delims=`" %i in (`'wmic process where `"name=`'$target.exe`'`" get ExecutablePath`') do PowerShell -NoProfile -ExecutionPolicy Bypass -Command Clear-Host; `".\$PSScriptName`" `"%i`" & exit"
             Add-Content $SED "FILE0=UnZip.ps1"
             Add-Content $SED "FILE1=$PSScriptName"
+			
+			# Add custom signing certificate to unzip.ps1 to allow for strict PowerShell execution policies.
+			if ($SignFiles) {
+				Write-Verbose "Signing unzip.ps1 with certificate thumb print: $($certificatethumb)."
+				$unzipscript = Get-item "$($Temp)\Unzip.ps1"
+				Set-AuthenticodeSignature -Certificate $certificateobject -FilePath $unzipscript | Out-Null
+				# Ensure the script is signed successfully with the Thumbprint
+				if ((((Get-AuthenticodeSignature -FilePath $unzipscript).SignerCertificate).Thumbprint) -ne $certificatethumb) {
+					Write-verbose "Signing unzip.ps1 failed"
+				} else {
+					Write-verbose "unzip.ps1 signing successful."
+				}
+			}
+			
         } else {
             $IndexOffset = 1
-            Add-Content $SED "AppLaunched=cmd /c for /f `"skip=1 tokens=1* delims=`" %i in (`'wmic process where `"name=`'$target.exe`'`" get ExecutablePath`') do PowerShell -ExecutionPolicy Bypass -Command Clear-Host; `".\$PSScriptName`" `"%i`" & exit"
+            Add-Content $SED "AppLaunched=cmd /c for /f `"skip=1 tokens=1* delims=`" %i in (`'wmic process where `"name=`'$target.exe`'`" get ExecutablePath`') do PowerShell -NoProfile -ExecutionPolicy Bypass -Command Clear-Host; `".\$PSScriptName`" `"%i`" & exit"
             Add-Content $SED "PostInstallCmd=<None>"
             Add-Content $SED "FILE0=$PSScriptName"
         }
@@ -279,6 +423,19 @@
         # Call IExpress to create exe from the sed we just created (run as admin)
         Start-Process $IExpress "/N $SED" -Wait -Verb RunAs
 
+		# Sign the final executable with the declared certificate if defined.
+		if ($SignFiles) {
+			Write-Verbose "Signing $($EXE) with certificate thumb print: $($certificatethumb)."
+			Set-AuthenticodeSignature -Certificate $certificateobject -FilePath $EXE | Out-Null
+			# Ensure the script is signed successfully with the Thumbprint
+			if ((((Get-AuthenticodeSignature -FilePath $EXE).SignerCertificate).Thumbprint) -ne $certificatethumb) {
+				Write-verbose "Signing $($EXE) failed"
+			} else {
+				Write-verbose "$($EXE) signing successful."
+			}
+			
+		}
+		
         # Clean up unless user specified not to
         if (-not $KeepTempDir) { Remove-Item $Temp -Recurse -Force }
     }
