@@ -29,13 +29,16 @@
 .PARAMETER KeepTempDir
     Keep the temp directory around after the exe is created. It is available at the root of C:.
 
-.PARAMETER x64
-    Use the 64-bit iexpress path so that 64-bit PowerShell is consequently called.
+.PARAMETER x86
+    Use the 32-bit iexpress path so that 32-bit PowerShell is consequently called.
 	
 .PARAMETER SigningCertificate
     Sign all PowerShell scripts and subsequent executable with the defined certificate.
     Expected format of Cert:\CurrentUser\My\XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
+.PARAMETER OutputDirectory
+    Move the completed executable to the defined directory.
+	
 .OUTPUTS
     An exe file in the same directory as the ps1 script you specify
 
@@ -55,7 +58,8 @@
 
 .NOTES
     Created by Nick Rodriguez
-
+	Modified by Etcha-Sketch - Added PKI signature support for script and executables and added output directory functionality. Changed default architecture to x64
+	
     Requires iexpress, which is included in most versions of Windows (https://en.wikipedia.org/wiki/IExpress).
 
 #>
@@ -105,7 +109,7 @@ param (
 
     [Parameter(Mandatory=$false)]
     [switch]
-    $x64,
+    $x86,
 		
     [Parameter(Mandatory=$false)]
     [ValidateScript({
@@ -119,16 +123,25 @@ param (
     }
        })]
        [string]
-       $SigningCertificate
+       $SigningCertificate,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateScript({
+        if (-not (Get-Item $_).PSIsContainer) {
+            throw "[$_] is not a directory."
+        } else { $true }
+    })]
+    [string]
+    $OutputDirectory
 )
 
 begin {
-    # use 32-bit iexpress for wider compatibility unless user specifies otherwise
-    if ($x64) {
-        $IExpress = "C:\WINDOWS\System32\iexpress"
-    } else {
+    # use 64-bit iexpress as everything should be 64-bit by now, you can specify -x86 for compatibility reasons.
+    if ($x86) {
         $IExpress = "C:\WINDOWS\SysWOW64\iexpress"
-    }
+    } else {
+        $IExpress = "C:\WINDOWS\System32\iexpress"
+	}
 
     function Get-File {
         [CmdletBinding()]
@@ -325,14 +338,14 @@ process {
     Write-Verbose "PowerShell script selected: $PSScriptPath"
 
 	# If signing certificate defined, generate objects to be used to sign subsequent scrips/executables.
-		if ($SigningCertificate -ne $null) {
-			Write-Verbose "Signing Certificate defined, will detect and sign any unsigned supplemental PowerShell scripts and final executable."
-			$certificateobject = Get-Item $SigningCertificate
-			$certificatethumb = $certificateobject.Thumbprint
-			$SignFiles = $true
-		} else {
-			$SignFiles = $false
-	}
+    if (($SigningCertificate -ne "") -and ($SigningCertificate -ne $null)) {
+        $SignFiles = $true
+        Write-Verbose "Signing Certificate defined, will detect and sign any unsigned supplemental PowerShell scripts and final executable."
+        $certificateobject = Get-Item $SigningCertificate
+        $certificatethumb = $certificateobject.Thumbprint
+    } else {
+        $SignFiles = $false
+    }
 	
     # Name of the extensionless target, replace spaces with underscores
     $Target = ($PSScriptName -replace '.ps1', '') -replace " ", '_'
@@ -489,14 +502,15 @@ process {
     }
 
     # If creating 64-bit exe, append to name to clarify
-    if ($x64) {
-        $EXE = "$ScriptRoot\$Target (x64).exe"
+    if ($x86) {
+        $EXE = "$ScriptRoot\$Target (x86).exe"
     } else {
-        $EXE = "$ScriptRoot\$Target.exe"
+        $EXE = "$ScriptRoot\$Target (x64).exe"
     }
     
 	# Determine if the EXE target already exists, and if it does prompt the user on how to continue.
-	if (Test-Path $EXE) {
+	if (($OutputDirectory -eq $null) -or ($OutputDirectory -eq "")) {
+		if (Test-Path $EXE) {
 			Write-Output "$($EXE) already exists, would you like to replace it?"
 			$ClearExisting = Read-Host "[y]/n"
 			if (($ClearExisting.ToUpper()) -eq 'N') {
@@ -508,9 +522,27 @@ process {
 				Remove-item $EXE -Force | Out-Null
 			}
 		}
+		$FinalOutputEXE = $EXE
+	} else {
+		$FinalOutputEXE = "$($OutputDirectory)\$($EXE.split('\')[-1])"
+		if (Test-Path $EXE) {
+			$EXE = $EXE.replace(".exe","-$(Get-Random -Minimum 1000000000 -Maximum 9999999999).exe")
+		}
+		if (Test-Path $FinalOutputEXE) {
+			Write-Output "$($FinalOutputEXE) already exists, would you like to replace it?"
+			$ClearExisting = Read-Host "[y]/n"
+			if (($ClearExisting.ToUpper()) -eq 'N') {
+				Write-Host "Please re-run after you have cleaned up the destination directory." -ForegroundColor Red
+				Start-sleep -seconds 30
+				Remove-Item $Temp -Recurse -Force 
+				break
+			} else {
+				Remove-item $FinalOutputEXE -Force | Out-Null
+			}	
+		}
+	}
+	Write-Verbose "Target EXE: $FinalOutputEXE"
 	
-	Write-Verbose "Target EXE: $EXE"
-
     # create the sed file used by iexpress
     $SED = "$Temp\$Target.sed"
     New-Item $SED -ItemType File -Force | Out-Null
@@ -605,7 +637,14 @@ process {
 	# Sign the final executable with the declared certificate if defined.
 	if ($SignFiles) {
 		Write-Verbose "Signing $($EXE) with certificate thumb print: $($certificatethumb)."
-		Set-AuthenticodeSignature -Certificate $certificateobject -FilePath $EXE | Out-Null
+		try {
+			Set-AuthenticodeSignature -Certificate $certificateobject -FilePath $EXE | Out-Null
+		} catch {
+			# Very rarely the system will try to sign the script too fast and will not be able to access the file.
+			Write-verbose "Signing $($EXE) too fast, waiting 5 seconds and trying again."
+			start-sleep -seconds 5
+			Set-AuthenticodeSignature -Certificate $certificateobject -FilePath $EXE | Out-Null
+		}
 		# Ensure the script is signed successfully with the Thumbprint
 		if ((((Get-AuthenticodeSignature -FilePath $EXE).SignerCertificate).Thumbprint) -ne $certificatethumb) {
 			Write-verbose "Signing $($EXE) failed"
@@ -613,6 +652,12 @@ process {
 			Write-verbose "$($EXE) signing successful."
 		}
 		
+	}
+	
+	if (!(($OutputDirectory -eq $null) -or ($OutputDirectory -eq ""))) {
+		Start-Sleep -Milliseconds 250
+		Write-Verbose "Moving the final executable to $($FinalOutputEXE)"
+		Move-item $EXE $FinalOutputEXE -Force
 	}
 	
     # Clean up unless user specified not to

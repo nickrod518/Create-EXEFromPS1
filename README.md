@@ -28,9 +28,11 @@ If blank, you will be prompted with a file browse dialog where you can select a 
 
 **KeepTempDir** - Keep the temp directory around after the exe is created. It is available at the root of C:.
 
-**x64** - Use the 64-bit iexpress path so that 64-bit PowerShell is consequently called.
+**x86** - Use the 32-bit iexpress path so that 32-bit PowerShell is consequently called. Intended for compatibility with older devices.
 
 **SigningCertificate** - Sign all PowerShell scripts and subsequent executable with the defined certificate. Expected format of Cert:\CurrentUser\My\XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+**OutputDirectory** - Move the completed executable to the defined directory.
 
 ### Examples
 ```
@@ -44,6 +46,11 @@ New-EXEFromPS1 -SupplementalDirectoryPath 'C:\Temp\MyTestDir' -KeepTempDir
 # Zips MyTestDir and attaches it to the exe. When the exe is run, but before the user's script gets run, 
 # it will be extracted to the same directory as the user's script. Temp directory used during exe creation
 # will be left intact for user inspection or debugging purposes.
+
+New-EXEFromPS1 -SelectSupplementalFiles -x86 -SigningCertificate Cert:\CurrentUser\My\XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX -OutputDirectory $env:userprofile\Desktop
+# Prompts the user to select the PowerShell script and supplemental files using an Open File Dialog. Creates a 32-bit application using the 32-bit iexpress binary.
+# If the defined script or supplemental files are PowerShell scripts they will be signed with the defined certificate. Once the executable is generated it will also
+# be signed and moved to the specified output directory.
 ```
 
 ## Issues
