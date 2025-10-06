@@ -577,9 +577,9 @@ process {
         Add-Content $UnZipScript $UnZipFunction
         Add-Content $UnZipScript "UnZip-File `'$SupplementalFiles`'"
         # If we're dealing with a zip file, we need to set the primary command to unzip the user's files
-        Add-Content $SED "AppLaunched=cmd /c PowerShell -NoProfile -ExecutionPolicy Bypass -File `".\UnZip.ps1`""
+        Add-Content $SED "AppLaunched=PowerShell -NoProfile -ExecutionPolicy Bypass -File `".\UnZip.ps1`""
         # After we've staged our files, run the user's script
-        Add-Content $SED "PostInstallCmd=cmd /c for /f `"skip=1 tokens=1* delims=`" %i in (`'wmic process where `"name=`'$target.exe`'`" get ExecutablePath`') do PowerShell -NoProfile -ExecutionPolicy Bypass -Command Clear-Host; `".\$PSScriptName`" `"%i`" & exit"
+        Add-Content $SED "PostInstallCmd=PowerShell -NoProfile -ExecutionPolicy Bypass -Command `"`& (Join-Path -Path `$PWD.Path -ChildPath '$($PSScriptName)')`""
         Add-Content $SED "FILE0=UnZip.ps1"
         Add-Content $SED "FILE1=$PSScriptName"
 		
@@ -598,7 +598,7 @@ process {
 		
     } else {
         $IndexOffset = 1
-        Add-Content $SED "AppLaunched=cmd /c for /f `"skip=1 tokens=1* delims=`" %i in (`'wmic process where `"name=`'$target.exe`'`" get ExecutablePath`') do PowerShell -NoProfile -ExecutionPolicy Bypass -Command Clear-Host; `".\$PSScriptName`" `"%i`" & exit"
+        Add-Content $SED "AppLaunched=cPowerShell -NoProfile -ExecutionPolicy Bypass -Command `"`& (Join-Path -Path `$PWD.Path -ChildPath '$($PSScriptName)')`""
         Add-Content $SED "PostInstallCmd=<None>"
         Add-Content $SED "FILE0=$PSScriptName"
     }
@@ -663,3 +663,4 @@ process {
     # Clean up unless user specified not to
     if (-not $KeepTempDir) { Remove-Item $Temp -Recurse -Force }
 }
+
